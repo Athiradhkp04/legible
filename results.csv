@@ -1,0 +1,2 @@
+api,version,operations,score,grade,descriptions,operationIds,params,errors,responses,examples,auth,idempotency,info
+testapi,1.0.0,2,88,A,100,100,100,50,100,50,100,100,100

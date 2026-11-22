@@ -1,0 +1,49 @@
+name: 'Legible OpenAPI Check'
+description: 'Score an OpenAPI spec for AI-agent readiness and report fixes'
+inputs:
+  spec:
+    description: 'Path to OpenAPI spec file (JSON or YAML)'
+    required: true
+  min-score:
+    description: 'Minimum acceptable score (0-100)'
+    required: false
+    default: '70'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install legible
+      shell: bash
+      run: npm install -g legible-api
+    - name: Score spec
+      shell: bash
+      run: |
+        RESULT=$(legible ${{ inputs.spec }} --min ${{ inputs.min-score }} --json)
+        echo "$RESULT"
+        
+        # Extract score and grade for summary
+        SCORE=$(echo "$RESULT" | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).score)")
+        GRADE=$(echo "$RESULT" | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).grade)")
+        OPERATIONS=$(echo "$RESULT" | node -e "console.log(JSON.parse(require('fs').readFileSync(0)).operations)")
+        
+        echo "## Legible Agent-Readiness Score" >> $GITHUB_STEP_SUMMARY
+        echo "**Score:** $SCORE/100 (Grade: $GRADE)" >> $GITHUB_STEP_SUMMARY
+        echo "**Operations:** $OPERATIONS" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Add failing checks to summary
+        echo "$RESULT" | node -e "
+          const r = JSON.parse(require('fs').readFileSync(0));
+          if (r.checks) {
+            const failing = r.checks.filter(c => c.pct < 1);
+            if (failing.length > 0) {
+              console.log('### Fixes Needed\\n');
+              failing.forEach(c => {
+                console.log('**' + c.label + '** (' + Math.round(c.pct * 100) + '%)\\n');
+                console.log(c.fix + '\\n');
+                if (c.where && c.where.length) {
+                  console.log('e.g. ' + c.where.join(', ') + '\\n');
+                }
+              });
+            }
+          }
+        " >> $GITHUB_STEP_SUMMARY
