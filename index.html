@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Legible: is your API readable by AI agents?</title>
+<meta name="description" content="Paste an OpenAPI spec. Get an agent-readiness score and the exact fixes. Free, runs in your browser.">
+<style>
+:root{--bg:#f4f7fb;--ink:#0f1b2d;--mut:#5b6b82;--line:#d5deea;--card:#fff;--hl:#ffd23f}
+@media(prefers-color-scheme:dark){:root{--bg:#0c1522;--ink:#e8eef7;--mut:#9aabc2;--line:#24344a;--card:#13202f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 20px 80px}
+h1{font:700 clamp(2rem,6vw,3.2rem)/1.05 Georgia,serif;margin:0 0 12px;letter-spacing:-.02em}
+h1 mark{background:var(--hl);color:#0f1b2d;padding:0 .15em}
+p.lead{color:var(--mut);margin:0 0 28px;max-width:56ch}
+textarea,input{width:100%;font:14px/1.4 ui-monospace,Menlo,monospace;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:12px}
+textarea{height:170px;resize:vertical}input{margin-top:10px}
+.row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+button,a.btn{font:600 15px system-ui;padding:11px 18px;border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;text-decoration:none}
+button.ghost,a.ghost{background:none;color:var(--ink)}
+button:focus-visible,a:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--hl);outline-offset:2px}
+#out{margin-top:36px}.big{display:flex;align-items:baseline;gap:14px}
+.big b{font:700 5rem/1 Georgia,serif}.big span{font-size:1.2rem;color:var(--mut)}
+.c{padding:14px 0;border-top:1px solid var(--line)}
+.bar{height:6px;background:var(--line);border-radius:3px;margin:6px 0}.bar i{display:block;height:100%;background:var(--ink);border-radius:3px}
+.fix{background:linear-gradient(transparent 55%,var(--hl) 55%);color:var(--ink);padding:0 2px}
+@media(prefers-color-scheme:dark){.fix{background:none;color:var(--hl)}}
+.m{color:var(--mut);font-size:14px}.err{color:#cc4b37;font-weight:600}
+footer{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--mut);font-size:14px}
+</style></head><body><main>
+<h1>Is your API <mark>legible</mark> to AI agents?</h1>
+<p class="lead">Paste an OpenAPI spec. Get a score out of 100 and the exact fixes that make agents choose, call, and recover from your API. Runs in your browser; nothing is uploaded.</p>
+<textarea id="t" aria-label="OpenAPI spec (JSON or YAML)" placeholder="Paste OpenAPI JSON or YAML here"></textarea>
+<input id="u" aria-label="Spec URL" placeholder="…or a spec URL (must allow cross-origin requests)">
+<div class="row"><button id="go">Score my API</button><button class="ghost" id="ex">Try a sample</button></div>
+<section id="out" aria-live="polite"></section>
+<footer>Want it fixed for you? <a href="mailto:YOUR_EMAIL?subject=Agent-readiness%20review">Get a written review for $15</a>. Also on the command line, in CI, and as an MCP tool: see the <a href="https://github.com/Athiradhkp04/legible">repo</a>.</footer>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="src/score.js"></script>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const SAMPLE={openapi:"3.0.0",info:{title:"Pets",version:"1"},paths:{"/pets":{get:{summary:"List",responses:{200:{description:"ok"}}},post:{operationId:"createPet",summary:"Create a pet",description:"Creates a pet record and returns it.",parameters:[{name:"Idempotency-Key",in:"header",description:"Retry key",schema:{type:"string"}}],responses:{201:{description:"Created",content:{"application/json":{schema:{type:"object"},example:{id:1}}}},400:{description:"Bad input"}}}}}};
+function show(r,spec){const o=$('out');if(r.error){o.innerHTML='<p class="err">'+esc(r.error)+'</p>';return}
+ const badge='[![agent-ready](https://img.shields.io/badge/agent--ready-'+r.score+'%2F100-'+(r.score>=70?'2e9e5b':r.score>=50?'d9a21b':'cc4b37')+')](https://athiradhkp04.github.io/legible/)';
+ o.innerHTML='<div class="big"><b>'+r.score+'</b><span>/100, grade '+r.grade+', '+r.operations+' operations</span></div>'+
+ r.checks.slice().sort((a,b)=>(a.pct-b.pct)*a.weight||b.weight-a.weight).map(c=>'<div class="c"><div><strong>'+esc(c.label)+'</strong> <span class="m">'+Math.round(c.pct*100)+'%</span></div><div class="bar"><i style="width:'+c.pct*100+'%"></i></div>'+(c.pct<1?'<span class="fix">'+esc(c.fix)+'</span>'+(c.where.length?'<div class="m">e.g. '+c.where.map(esc).join(', ')+'</div>':''):'')+'</div>').join('')+
+ '<div class="row"><button class="ghost" id="cp">Copy README badge</button></div>';
+ $('cp').onclick=()=>{navigator.clipboard.writeText(badge);$('cp').textContent='Copied'}}
+function parse(t){try{return JSON.parse(t)}catch(e){return jsyaml.load(t)}}
+$('go').onclick=async()=>{try{let t=$('t').value.trim();if(!t&&$('u').value)t=await (await fetch($('u').value)).text();const s=parse(t);show(Legible.score(s),s)}catch(e){$('out').innerHTML='<p class="err">Could not read that spec: '+esc(e.message)+'. Paste it instead, or check the URL allows cross-origin requests.</p>'}};
+$('ex').onclick=()=>{$('t').value=JSON.stringify(SAMPLE,null,2);$('go').click()};
+const q=new URLSearchParams(location.search).get('spec');if(q){$('u').value=q;$('go').click()}
+</script></body></html>
